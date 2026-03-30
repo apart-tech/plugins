@@ -1,21 +1,31 @@
 ---
 name: evaluating-dependencies
-description: "Evaluate npm packages for build-vs-buy decisions. Use when adding a new dependency, reviewing package.json changes, or deciding whether to use a library or implement functionality yourself."
+description: "Evaluate npm or Python packages for build-vs-buy decisions. Use when adding a new dependency, reviewing package.json or requirements.txt changes, pip install, or deciding whether to use a library or implement functionality yourself."
 argument-hint: "[package-name] [specific-function]"
-allowed-tools: Bash(npm:*), Bash(gh:*), Bash(npx:*), Read, Grep, Glob, WebFetch
+allowed-tools: Bash(npm:*), Bash(gh:*), Bash(npx:*), Bash(pip:*), Bash(pip-audit:*), Bash(python:*), Bash(curl:*), Read, Grep, Glob, WebFetch
 ---
 
 # Evaluating Dependencies
 
-Evaluate whether to **USE**, **EXTRACT**, or **BUILD** before adding any npm dependency.
+Evaluate whether to **USE**, **EXTRACT**, or **BUILD** before adding any dependency.
 
 ## The Rule
 
-**No new dependency without an evaluation.** If you are about to `npm install` a new package or add one to package.json, run this evaluation first.
+**No new dependency without an evaluation.** If you are about to install a new package or add one to package.json / requirements.txt / pyproject.toml, run this evaluation first.
+
+## Phase 0: Detect Ecosystem
+
+Determine the ecosystem from context:
+
+- **npm** — user mentions npm, package.json, node_modules, or `npm install`
+- **Python** — user mentions pip, PyPI, requirements.txt, pyproject.toml, or `pip install`
+- **Ambiguous** — check if the package exists on npm (`npm info <pkg>`) and/or PyPI (`curl -s https://pypi.org/pypi/<pkg>/json`). If both, ask the user which ecosystem they mean.
+
+Then follow the ecosystem-specific gathering steps below.
 
 ## When Invoked by User
 
-User runs `/apart:evaluating-dependencies <package> [function]`. The package name is available as `$ARGUMENTS[0]` and the optional function as `$ARGUMENTS[1]`. Produce the **full report** format.
+User runs `/evaluating-dependencies <package> [function]`. The package name is available as `$ARGUMENTS[0]` and the optional function as `$ARGUMENTS[1]`. Produce the **full report** format.
 
 ## When Auto-Triggered
 
@@ -25,26 +35,28 @@ You are about to add a dependency. Run the evaluation silently and produce the *
 
 Run these commands. Parallelize where possible.
 
-### 1A — Package metadata (parallel)
+### npm Ecosystem
+
+#### 1A — Package metadata (parallel)
 ```bash
 npm info <pkg> --json
 npm pack <pkg> --dry-run 2>&1
 ```
 
-### 1B — Dependency tree
+#### 1B — Dependency tree
 ```bash
 npm info <pkg> dependencies --json
 npm view <pkg> dist.unpackedSize
 ```
 
-### 1C — Security
+#### 1C — Security
 ```bash
 # If package is in node_modules:
 npm audit --json
 # Otherwise, check advisories from npm info output
 ```
 
-### 1D — Source analysis
+#### 1D — Source analysis
 Fetch the package entry point to identify its public API:
 ```bash
 # Get the main/exports field from npm info output
@@ -57,7 +69,7 @@ If the user specified a specific function, find that function's source code:
 
 Count total public exports. Calculate usage ratio: functions needed / total exports.
 
-### 1E — Maintenance signals
+#### 1E — Maintenance signals
 Extract from the npm info JSON output:
 - `time.modified` — last publish date
 - `maintainers` — count
@@ -65,14 +77,62 @@ Extract from the npm info JSON output:
 
 If a GitHub repository is linked:
 ```bash
-# Extract repo from npm info output, then:
 gh api repos/<owner>/<repo> --jq '{stars: .stargazers_count, open_issues: .open_issues_count, pushed_at: .pushed_at}'
 ```
 
-### 1F — Alternatives
+#### 1F — Alternatives
 ```bash
 npm search <keywords-describing-the-functionality> --json | head -20
 ```
+
+### Python Ecosystem
+
+#### 1A — Package metadata
+```bash
+curl -s https://pypi.org/pypi/<pkg>/json
+```
+
+Extract from the JSON response: `info.version`, `info.license`, `info.summary`, `info.author`, `info.requires_dist` (dependencies), `info.project_urls` (GitHub link), `urls` (release files and sizes).
+
+#### 1B — Dependency tree
+From the PyPI JSON `info.requires_dist` field — list direct dependencies. For transitive depth:
+```bash
+pip install --dry-run <pkg> 2>&1
+```
+Count packages that would be installed.
+
+#### 1C — Security
+```bash
+pip-audit --desc <pkg> 2>&1
+# Or check PyPI advisories from the JSON response
+# Or: curl -s https://pypi.org/pypi/<pkg>/json | look for yanked releases
+```
+
+Also check for `postinstall` equivalent: `.pth` files, `setup.py` with arbitrary code execution, or suspicious `__init__.py` imports (relevant to supply chain attacks like litellm).
+
+#### 1D — Source analysis
+From PyPI JSON `info.project_urls`, find the GitHub repo. Then:
+- Fetch the module's `__init__.py` or main source file to count public exports (`__all__` or top-level functions/classes)
+- If user specified a function, find its source on GitHub and assess complexity
+
+Count total public API surface. Calculate usage ratio.
+
+#### 1E — Maintenance signals
+From the PyPI JSON response:
+- Latest release date from `urls[0].upload_time`
+- Release frequency from `releases` object (count recent versions)
+- Maintainer count from `info.maintainer` and `info.author`
+
+If GitHub repo is linked:
+```bash
+gh api repos/<owner>/<repo> --jq '{stars: .stargazers_count, open_issues: .open_issues_count, pushed_at: .pushed_at}'
+```
+
+#### 1F — Alternatives
+```bash
+# PyPI has no search API — use GitHub or web search
+```
+Search GitHub or the web for `<functionality> python library` to find focused alternatives.
 
 Focus on packages that are smaller or more focused than the one being evaluated.
 
@@ -166,12 +226,22 @@ dep-eval: moment → EXTRACT (need formatRelative only, 284KB non-tree-shakeable
 
 If you notice any of these, flag them prominently in the report:
 
+**Both ecosystems:**
 - Package has 0 weekly downloads
 - Solo maintainer with no activity in 12+ months
-- `install` or `postinstall` scripts that execute arbitrary code
 - Package name is a typosquat of a popular package
+- License field is missing or "UNLICENSED"/"UNKNOWN"
+
+**npm-specific:**
+- `install` or `postinstall` scripts that execute arbitrary code
 - Dependencies that pull in native/binary modules unnecessarily
-- License field is missing or "UNLICENSED"
+
+**Python-specific:**
+- `.pth` files in the package (code execution on import — litellm attack vector)
+- `setup.py` with network calls or base64-encoded payloads
+- Yanked releases on PyPI (check `releases` object for `yanked: true`)
+- Package imports that trigger side effects in `__init__.py`
+- Mismatched package name vs. import name (typosquatting signal)
 
 ## Common Rationalizations
 
