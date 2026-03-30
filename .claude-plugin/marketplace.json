@@ -10,7 +10,7 @@
   },
   "plugins": [
     {
-      "name": "apart",
+      "name": "dependency-evaluator",
       "description": "Developer tools and evaluation skills from Apart Tech",
       "source": "./",
       "version": "1.0.0",

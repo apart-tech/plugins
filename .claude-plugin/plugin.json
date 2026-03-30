@@ -1,5 +1,5 @@
 {
-  "name": "apart",
+  "name": "dependency-evaluator",
   "version": "1.0.0",
   "description": "Apart Tech's plugin collection for Claude Code — developer tools, evaluation skills, and workflow automation",
   "author": {
