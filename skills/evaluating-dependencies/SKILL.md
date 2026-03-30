@@ -109,30 +109,47 @@ Count the signal leans. Apply weights. Determine one of three verdicts:
 
 ### Full Report (user-invoked)
 
-```
-┌─ Dependency Evaluation: <package> ──────────────┐
-│ You need: <function/purpose>                     │
-│                                                  │
-│ Source complexity:  <LOC>, <details>           → <USE/BUILD>
-│ Usage ratio:       <n>/<total> exports (<%)   → <USE/BUILD>
-│ Bundle size:       <size> tree-shaken          → <USE/BUILD>
-│ Transitive deps:   <count>                     → <USE/BUILD>
-│ Security:          <status>                    → <USE/BUILD>
-│ Maintenance:       <status>                    → <USE/BUILD>
-│ License:           <license>                   → <USE/BUILD>
-│ Alternatives:      <status>                    → <USE/BUILD>
-│                                                  │
-│ ➤ VERDICT: <USE/EXTRACT/BUILD>                   │
-│   <2-3 sentence justification>                   │
-│                                                  │
-│ ➤ IF EXTRACTING: <path to function>              │
-│   <LOC>, depends on <internals>.                 │
-└──────────────────────────────────────────────────┘
+Use a markdown table with no box-drawing characters. Keep each signal value to ONE line — no wrapping.
+
+```markdown
+## dep-eval: <package>
+
+**You need:** `<function>` — <brief purpose>
+
+| Signal | Value | Lean |
+|--------|-------|------|
+| Source complexity | <n> LOC, <brief note> | BUILD / USE |
+| Usage ratio | <n>/<total> exports (<n>%) | BUILD / USE |
+| Bundle size | <size>, <tree-shake status> | BUILD / USE |
+| Transitive deps | <count> | BUILD / USE |
+| Security | <status> | BUILD / USE |
+| Maintenance | <last publish>, <n> maintainers | BUILD / USE |
+| License | <license> | BUILD / USE |
+| Alternatives | <name or "none"> | BUILD / USE |
+
+### VERDICT: <USE / EXTRACT / BUILD>
+
+<2-3 sentence justification>
+
+### If extracting
+
+<file list, LOC, internal deps>
+
+### If building
+
+<code snippet or description of what to implement>
 ```
 
-Always include the "IF EXTRACTING" section when verdict is USE or EXTRACT — it gives the user a fallback path.
+**Rules for the table:**
+- Every signal value MUST fit on a single line. Abbreviate if needed.
+- The "Lean" column is ONLY "USE" or "BUILD" — never a sentence.
+- Source complexity details (edge cases, what it handles) go in the justification, not the table.
+- Include "If extracting" when verdict is USE or EXTRACT.
+- Include "If building" when verdict is BUILD or EXTRACT.
 
 ### Condensed (agent-invoked)
+
+One line, no markdown:
 
 ```
 dep-eval: <package> → <VERDICT> (<key reasons, comma-separated>)
