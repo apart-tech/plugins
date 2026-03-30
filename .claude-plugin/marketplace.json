@@ -1,0 +1,23 @@
+{
+  "name": "apart-marketplace",
+  "owner": {
+    "name": "Apart Tech",
+    "email": "dev@apart.no"
+  },
+  "metadata": {
+    "description": "Apart Tech's plugin marketplace for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "apart",
+      "description": "Developer tools and evaluation skills from Apart Tech",
+      "source": "./",
+      "version": "1.0.0",
+      "homepage": "https://github.com/apart-tech/plugins",
+      "license": "MIT",
+      "keywords": ["npm", "dependencies", "evaluation", "build-vs-buy"],
+      "category": "development"
+    }
+  ]
+}
